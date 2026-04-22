@@ -172,7 +172,7 @@ LogEvent (JSON) ──► MinMaxScaler.transform ──► IsolationForest.score
 The `Dockerfile` builds a minimal inference image:
 
 - Base: `python:3.12-slim` with only `gcc` as a system dep
-- Copies `requirements-serve.txt` (inference-only deps no training libraries)
+- Copies `requirements.txt` (inference-only deps no training libraries)
 - Model artifacts are **not baked into the image** they are mounted at runtime via the PVC at `/models`
 - Environment variables control model paths and threshold, making the image reusable across model versions
 
