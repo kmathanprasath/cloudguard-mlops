@@ -1,0 +1,591 @@
+# PIPELINE DEFINITION
+# Name: cloudguard-training-pipeline
+# Description: Train, evaluate, and deploy CloudGuard Isolation Forest to KServe
+# Inputs:
+#    aws_region: str [Default: 'us-east-1']
+#    contamination: float [Default: 0.005]
+#    fused_csv_uri: str [Default: 's3://mathanm5mlops/data/fused_logs.csv']
+#    kserve_image: str [Default: 'mathanm5/cloudguard:v1']
+#    kserve_namespace: str [Default: 'kubeflow-mlops']
+#    min_auroc: float [Default: 0.8]
+#    n_estimators: int [Default: 200.0]
+#    s3_bucket: str [Default: 'mathanm5mlops']
+#    s3_prefix: str [Default: 'cloudguard/models/v1']
+components:
+  comp-condition-1:
+    dag:
+      tasks:
+        deploy-kserve:
+          cachingOptions:
+            enableCache: true
+          componentRef:
+            name: comp-deploy-kserve
+          dependentTasks:
+          - push-model
+          inputs:
+            parameters:
+              image:
+                componentInputParameter: pipelinechannel--kserve_image
+              model_uri:
+                runtimeValue:
+                  constant: s3://{{$.inputs.parameters['pipelinechannel--s3_bucket']}}/{{$.inputs.parameters['pipelinechannel--s3_prefix']}}
+              namespace:
+                componentInputParameter: pipelinechannel--kserve_namespace
+              pipelinechannel--s3_bucket:
+                componentInputParameter: pipelinechannel--s3_bucket
+              pipelinechannel--s3_prefix:
+                componentInputParameter: pipelinechannel--s3_prefix
+          taskInfo:
+            name: deploy-kserve
+        push-model:
+          cachingOptions:
+            enableCache: true
+          componentRef:
+            name: comp-push-model
+          inputs:
+            artifacts:
+              model_in:
+                componentInputArtifact: pipelinechannel--train-model_out
+              scaler_in:
+                componentInputArtifact: pipelinechannel--data-prep-scaler_out
+            parameters:
+              aws_region:
+                componentInputParameter: pipelinechannel--aws_region
+              s3_bucket:
+                componentInputParameter: pipelinechannel--s3_bucket
+              s3_prefix:
+                componentInputParameter: pipelinechannel--s3_prefix
+          taskInfo:
+            name: push-model
+    inputDefinitions:
+      artifacts:
+        pipelinechannel--data-prep-scaler_out:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        pipelinechannel--train-model_out:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        pipelinechannel--aws_region:
+          parameterType: STRING
+        pipelinechannel--evaluate-auroc:
+          parameterType: NUMBER_DOUBLE
+        pipelinechannel--kserve_image:
+          parameterType: STRING
+        pipelinechannel--kserve_namespace:
+          parameterType: STRING
+        pipelinechannel--min_auroc:
+          parameterType: NUMBER_DOUBLE
+        pipelinechannel--s3_bucket:
+          parameterType: STRING
+        pipelinechannel--s3_prefix:
+          parameterType: STRING
+  comp-data-prep:
+    executorLabel: exec-data-prep
+    inputDefinitions:
+      parameters:
+        fused_csv_uri:
+          parameterType: STRING
+    outputDefinitions:
+      artifacts:
+        X_test_out:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        X_train_out:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        scaler_out:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        y_test_out:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        y_train_out:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-deploy-kserve:
+    executorLabel: exec-deploy-kserve
+    inputDefinitions:
+      parameters:
+        image:
+          defaultValue: mathanm5/cloudguard:v1
+          isOptional: true
+          parameterType: STRING
+        inference_service_name:
+          defaultValue: cloudguard
+          isOptional: true
+          parameterType: STRING
+        max_replicas:
+          defaultValue: 3.0
+          isOptional: true
+          parameterType: NUMBER_INTEGER
+        min_replicas:
+          defaultValue: 1.0
+          isOptional: true
+          parameterType: NUMBER_INTEGER
+        model_uri:
+          parameterType: STRING
+        namespace:
+          defaultValue: kubeflow-mlops
+          isOptional: true
+          parameterType: STRING
+  comp-evaluate:
+    executorLabel: exec-evaluate
+    inputDefinitions:
+      artifacts:
+        X_test_in:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+        model_in:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        y_test_in:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        metrics_out:
+          artifactType:
+            schemaTitle: system.Metrics
+            schemaVersion: 0.0.1
+      parameters:
+        auroc:
+          parameterType: NUMBER_DOUBLE
+        f1:
+          parameterType: NUMBER_DOUBLE
+  comp-push-model:
+    executorLabel: exec-push-model
+    inputDefinitions:
+      artifacts:
+        model_in:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        scaler_in:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+      parameters:
+        aws_region:
+          defaultValue: us-east-1
+          isOptional: true
+          parameterType: STRING
+        s3_bucket:
+          parameterType: STRING
+        s3_prefix:
+          parameterType: STRING
+  comp-train:
+    executorLabel: exec-train
+    inputDefinitions:
+      artifacts:
+        X_train_in:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+      parameters:
+        contamination:
+          defaultValue: 0.005
+          isOptional: true
+          parameterType: NUMBER_DOUBLE
+        n_estimators:
+          defaultValue: 200.0
+          isOptional: true
+          parameterType: NUMBER_INTEGER
+    outputDefinitions:
+      artifacts:
+        model_out:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-data-prep:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - data_prep
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'pandas==2.2.2'\
+          \ 'numpy==2.0.2' 'scikit-learn==1.6.1'  &&  python3 -m pip install --quiet\
+          \ --no-warn-script-location 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5;\
+          \ python_version<\"3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef data_prep(\n    fused_csv_uri: str,\n    X_train_out: Output[Dataset],\n\
+          \    X_test_out: Output[Dataset],\n    y_train_out: Output[Dataset],\n \
+          \   y_test_out: Output[Dataset],\n    scaler_out: Output[Model],\n):\n \
+          \   import pandas as pd\n    import numpy as np\n    import joblib\n   \
+          \ from sklearn.preprocessing import LabelEncoder, MinMaxScaler\n    from\
+          \ sklearn.model_selection import train_test_split\n\n    df = pd.read_csv(fused_csv_uri)\n\
+          \n    # Feature engineering\n    df[\"timestamp\"] = pd.to_datetime(df[\"\
+          timestamp\"], errors=\"coerce\")\n    df[\"hour\"] = df[\"timestamp\"].dt.hour.fillna(0).astype(int)\n\
+          \    df[\"day_of_week\"] = df[\"timestamp\"].dt.dayofweek.fillna(0).astype(int)\n\
+          \    df[\"is_weekend\"] = df[\"day_of_week\"].isin([5, 6]).astype(int)\n\
+          \    df[\"is_offhours\"] = (~df[\"hour\"].between(8, 18)).astype(int)\n\n\
+          \    if \"is_failed\" not in df.columns:\n        df[\"is_failed\"] = 0\n\
+          \    if \"is_rare_ip\" not in df.columns:\n        ip_counts = df[\"source_ip\"\
+          ].value_counts()\n        df[\"is_rare_ip\"] = df[\"source_ip\"].map(ip_counts).lt(3).astype(int)\n\
+          \n    df[\"action_count_1h\"] = df.groupby(\"user\").cumcount() + 1\n\n\
+          \    for col in [\"user\", \"action\", \"source_type\"]:\n        le = LabelEncoder()\n\
+          \        df[col + \"_enc\"] = le.fit_transform(df[col].fillna(\"unknown\"\
+          ).astype(str))\n\n    FEATURE_COLS = [\n        \"hour\", \"day_of_week\"\
+          , \"is_weekend\", \"is_offhours\",\n        \"is_failed\", \"is_rare_ip\"\
+          , \"user_enc\", \"action_enc\",\n        \"source_type_enc\", \"action_count_1h\"\
+          ,\n    ]\n\n    X = df[FEATURE_COLS].fillna(0).values\n    y = df[\"label\"\
+          ].fillna(0).values.astype(int)\n\n    scaler = MinMaxScaler()\n    X_scaled\
+          \ = scaler.fit_transform(X)\n\n    X_tr, X_te, y_tr, y_te = train_test_split(\n\
+          \        X_scaled, y, test_size=0.2, random_state=42, stratify=y\n    )\n\
+          \n    np.save(X_train_out.path + \".npy\", X_tr)\n    np.save(X_test_out.path\
+          \ + \".npy\", X_te)\n    np.save(y_train_out.path + \".npy\", y_tr)\n  \
+          \  np.save(y_test_out.path + \".npy\", y_te)\n    joblib.dump(scaler, scaler_out.path\
+          \ + \".pkl\")\n\n    print(f\"Data prep done \u2014 train: {X_tr.shape},\
+          \ test: {X_te.shape}\")\n\n"
+        image: python:3.12-slim
+    exec-deploy-kserve:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - deploy_kserve
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kubernetes==29.0.0'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef deploy_kserve(\n    model_uri: str,\n    namespace: str = \"\
+          kubeflow-mlops\",\n    inference_service_name: str = \"cloudguard\",\n \
+          \   image: str = \"mathanm5/cloudguard:v1\",\n    min_replicas: int = 1,\n\
+          \    max_replicas: int = 3,\n):\n    \"\"\"Creates or patches a KServe InferenceService\
+          \ using a custom predictor.\"\"\"\n    from kubernetes import client, config\n\
+          \n    config.load_incluster_config()\n\n    custom_api = client.CustomObjectsApi()\n\
+          \n    inference_service = {\n        \"apiVersion\": \"serving.kserve.io/v1beta1\"\
+          ,\n        \"kind\": \"InferenceService\",\n        \"metadata\": {\n  \
+          \          \"name\": inference_service_name,\n            \"namespace\"\
+          : namespace,\n            \"annotations\": {\n                \"serving.kserve.io/deploymentMode\"\
+          : \"Serverless\",\n            },\n        },\n        \"spec\": {\n   \
+          \         \"predictor\": {\n                \"minReplicas\": min_replicas,\n\
+          \                \"maxReplicas\": max_replicas,\n                \"containers\"\
+          : [\n                    {\n                        \"name\": \"cloudguard\"\
+          ,\n                        \"image\": image,\n                        \"\
+          ports\": [{\"containerPort\": 8080, \"protocol\": \"TCP\"}],\n         \
+          \               \"env\": [\n                            {\"name\": \"MODEL_PATH\"\
+          , \"value\": \"/models/iforest.pkl\"},\n                            {\"\
+          name\": \"SCALER_PATH\", \"value\": \"/models/scaler.pkl\"},\n         \
+          \                   {\"name\": \"ANOMALY_THRESHOLD\", \"value\": \"0.5\"\
+          },\n                        ],\n                        \"volumeMounts\"\
+          : [\n                            {\"name\": \"model-store\", \"mountPath\"\
+          : \"/models\"}\n                        ],\n                        \"resources\"\
+          : {\n                            \"requests\": {\"cpu\": \"500m\", \"memory\"\
+          : \"512Mi\"},\n                            \"limits\": {\"cpu\": \"2\",\
+          \ \"memory\": \"2Gi\"},\n                        },\n                  \
+          \  }\n                ],\n                \"volumes\": [\n             \
+          \       {\n                        \"name\": \"model-store\",\n        \
+          \                \"persistentVolumeClaim\": {\"claimName\": \"cloudguard-model-pvc\"\
+          },\n                    }\n                ],\n            }\n        },\n\
+          \    }\n\n    group, version, plural = \"serving.kserve.io\", \"v1beta1\"\
+          , \"inferenceservices\"\n    try:\n        custom_api.create_namespaced_custom_object(\n\
+          \            group=group, version=version, namespace=namespace,\n      \
+          \      plural=plural, body=inference_service,\n        )\n        print(f\"\
+          InferenceService '{inference_service_name}' created in '{namespace}'\")\n\
+          \    except client.exceptions.ApiException as e:\n        if e.status ==\
+          \ 409:  # already exists \u2014 patch it\n            custom_api.patch_namespaced_custom_object(\n\
+          \                group=group, version=version, namespace=namespace,\n  \
+          \              plural=plural, name=inference_service_name, body=inference_service,\n\
+          \            )\n            print(f\"InferenceService '{inference_service_name}'\
+          \ patched\")\n        else:\n            raise\n\n"
+        image: python:3.12-slim
+    exec-evaluate:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluate
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'scikit-learn==1.6.1'\
+          \ 'numpy==2.0.2' 'joblib==1.5.3'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluate(\n    model_in: Input[Model],\n    X_test_in: Input[Dataset],\n\
+          \    y_test_in: Input[Dataset],\n    metrics_out: Output[Metrics],\n) ->\
+          \ NamedTuple(\"Outputs\", [(\"auroc\", float), (\"f1\", float)]):\n    import\
+          \ numpy as np\n    import joblib\n    from sklearn.metrics import roc_auc_score,\
+          \ f1_score\n    from collections import namedtuple\n\n    model = joblib.load(model_in.path\
+          \ + \".pkl\")\n    X_test = np.load(X_test_in.path + \".npy\")\n    y_test\
+          \ = np.load(y_test_in.path + \".npy\")\n\n    scores = -model.score_samples(X_test)\
+          \  # higher = more anomalous\n    preds = (scores > np.percentile(scores,\
+          \ 97.5)).astype(int)\n\n    auroc = float(roc_auc_score(y_test, scores))\n\
+          \    f1 = float(f1_score(y_test, preds, zero_division=0))\n\n    metrics_out.log_metric(\"\
+          auroc\", auroc)\n    metrics_out.log_metric(\"f1\", f1)\n    print(f\"AUROC:\
+          \ {auroc:.4f}  F1: {f1:.4f}\")\n\n    Outputs = namedtuple(\"Outputs\",\
+          \ [\"auroc\", \"f1\"])\n    return Outputs(auroc=auroc, f1=f1)\n\n"
+        image: python:3.12-slim
+    exec-push-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - push_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'boto3==1.34.0'\
+          \  &&  python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef push_model(\n    model_in: Input[Model],\n    scaler_in: Input[Model],\n\
+          \    s3_bucket: str,\n    s3_prefix: str,\n    aws_region: str = \"us-east-1\"\
+          ,\n):\n    import boto3, os\n\n    s3 = boto3.client(\"s3\", region_name=aws_region)\n\
+          \n    for local_suffix, s3_key in [\n        (model_in.path + \".pkl\",\
+          \ f\"{s3_prefix}/iforest.pkl\"),\n        (scaler_in.path + \".pkl\", f\"\
+          {s3_prefix}/scaler.pkl\"),\n    ]:\n        s3.upload_file(local_suffix,\
+          \ s3_bucket, s3_key)\n        print(f\"Uploaded {local_suffix} \u2192 s3://{s3_bucket}/{s3_key}\"\
+          )\n\n"
+        image: python:3.12-slim
+    exec-train:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'scikit-learn==1.6.1'\
+          \ 'numpy==2.0.2' 'joblib==1.5.3'  &&  python3 -m pip install --quiet --no-warn-script-location\
+          \ 'kfp==2.16.0' '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"\
+          3.9\"' && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train(\n    X_train_in: Input[Dataset],\n    model_out: Output[Model],\n\
+          \    n_estimators: int = 200,\n    contamination: float = 0.005,\n):\n \
+          \   import numpy as np\n    import joblib\n    from sklearn.ensemble import\
+          \ IsolationForest\n\n    X_train = np.load(X_train_in.path + \".npy\")\n\
+          \n    clf = IsolationForest(\n        n_estimators=n_estimators,\n     \
+          \   contamination=contamination,\n        random_state=42,\n        n_jobs=-1,\n\
+          \    )\n    clf.fit(X_train)\n    joblib.dump(clf, model_out.path + \".pkl\"\
+          )\n    print(f\"Isolation Forest trained on {X_train.shape[0]} samples\"\
+          )\n\n"
+        image: python:3.12-slim
+pipelineInfo:
+  description: Train, evaluate, and deploy CloudGuard Isolation Forest to KServe
+  name: cloudguard-training-pipeline
+root:
+  dag:
+    tasks:
+      condition-1:
+        componentRef:
+          name: comp-condition-1
+        dependentTasks:
+        - data-prep
+        - evaluate
+        - train
+        inputs:
+          artifacts:
+            pipelinechannel--data-prep-scaler_out:
+              taskOutputArtifact:
+                outputArtifactKey: scaler_out
+                producerTask: data-prep
+            pipelinechannel--train-model_out:
+              taskOutputArtifact:
+                outputArtifactKey: model_out
+                producerTask: train
+          parameters:
+            pipelinechannel--aws_region:
+              componentInputParameter: aws_region
+            pipelinechannel--evaluate-auroc:
+              taskOutputParameter:
+                outputParameterKey: auroc
+                producerTask: evaluate
+            pipelinechannel--kserve_image:
+              componentInputParameter: kserve_image
+            pipelinechannel--kserve_namespace:
+              componentInputParameter: kserve_namespace
+            pipelinechannel--min_auroc:
+              componentInputParameter: min_auroc
+            pipelinechannel--s3_bucket:
+              componentInputParameter: s3_bucket
+            pipelinechannel--s3_prefix:
+              componentInputParameter: s3_prefix
+        taskInfo:
+          name: quality-gate
+        triggerPolicy:
+          condition: inputs.parameter_values['pipelinechannel--evaluate-auroc'] >=
+            inputs.parameter_values['pipelinechannel--min_auroc']
+      data-prep:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-data-prep
+        inputs:
+          parameters:
+            fused_csv_uri:
+              componentInputParameter: fused_csv_uri
+        taskInfo:
+          name: data-prep
+      evaluate:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-evaluate
+        dependentTasks:
+        - data-prep
+        - train
+        inputs:
+          artifacts:
+            X_test_in:
+              taskOutputArtifact:
+                outputArtifactKey: X_test_out
+                producerTask: data-prep
+            model_in:
+              taskOutputArtifact:
+                outputArtifactKey: model_out
+                producerTask: train
+            y_test_in:
+              taskOutputArtifact:
+                outputArtifactKey: y_test_out
+                producerTask: data-prep
+        taskInfo:
+          name: evaluate
+      train:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train
+        dependentTasks:
+        - data-prep
+        inputs:
+          artifacts:
+            X_train_in:
+              taskOutputArtifact:
+                outputArtifactKey: X_train_out
+                producerTask: data-prep
+          parameters:
+            contamination:
+              componentInputParameter: contamination
+            n_estimators:
+              componentInputParameter: n_estimators
+        taskInfo:
+          name: train
+  inputDefinitions:
+    parameters:
+      aws_region:
+        defaultValue: us-east-1
+        isOptional: true
+        parameterType: STRING
+      contamination:
+        defaultValue: 0.005
+        isOptional: true
+        parameterType: NUMBER_DOUBLE
+      fused_csv_uri:
+        defaultValue: s3://mathanm5mlops/data/fused_logs.csv
+        isOptional: true
+        parameterType: STRING
+      kserve_image:
+        defaultValue: mathanm5/cloudguard:v1
+        isOptional: true
+        parameterType: STRING
+      kserve_namespace:
+        defaultValue: kubeflow-mlops
+        isOptional: true
+        parameterType: STRING
+      min_auroc:
+        defaultValue: 0.8
+        isOptional: true
+        parameterType: NUMBER_DOUBLE
+      n_estimators:
+        defaultValue: 200.0
+        isOptional: true
+        parameterType: NUMBER_INTEGER
+      s3_bucket:
+        defaultValue: mathanm5mlops
+        isOptional: true
+        parameterType: STRING
+      s3_prefix:
+        defaultValue: cloudguard/models/v1
+        isOptional: true
+        parameterType: STRING
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.16.0

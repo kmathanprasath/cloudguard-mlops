@@ -10,3 +10,4 @@ requests
 python-dotenv
 kaggle
 mitreattack-python
+kfp
