@@ -1,6 +1,6 @@
 # CloudGuard
 
-> An AI-powered cloud threat detection system with a full MLOps lifecycle — multi-source log ingestion, unsupervised anomaly detection, MITRE ATT&CK mapping, CVE enrichment, and a Claude-powered SOC analyst, all wired into a Kubeflow pipeline that trains, gates, and deploys to KServe automatically.
+> An AI-powered cloud threat detection system with a full MLOps lifecycle multi-source log ingestion, unsupervised anomaly detection, MITRE ATT&CK mapping, CVE enrichment, and a Claude-powered SOC analyst, all wired into a Kubeflow pipeline that trains, gates, and deploys to KServe automatically.
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
@@ -50,7 +50,7 @@
 
 The pipeline is defined in `pipeline/cloudguard_pipeline.py` using **Kubeflow Pipelines v2 SDK** and compiled to a YAML artifact. Each stage runs in an isolated container with pinned dependencies.
 
-### Stage 1 — `data_prep`
+### Stage 1 -> `data_prep`
 
 - Reads the fused log CSV from S3 (`fused_csv_uri`)
 - Engineers temporal features: `hour`, `day_of_week`, `is_weekend`, `is_offhours`
@@ -59,20 +59,20 @@ The pipeline is defined in `pipeline/cloudguard_pipeline.py` using **Kubeflow Pi
 - Fits a `MinMaxScaler` and serialises it alongside train/test splits as pipeline artifacts
 - Outputs: `X_train`, `X_test`, `y_train`, `y_test`, `scaler` (all as KFP `Dataset`/`Model` artifacts)
 
-### Stage 2 — `train`
+### Stage 2 -> `train`
 
 - Trains an `IsolationForest` on the scaled training set
 - Hyperparameters are pipeline-level inputs (default: `n_estimators=200`, `contamination=0.005`)
 - Serialises the fitted model with `joblib` as a KFP `Model` artifact
 
-### Stage 3 — `evaluate`
+### Stage 3 -> `evaluate`
 
 - Scores the test set using `score_samples` (negated → higher = more anomalous)
 - Computes **AUROC** and **F1** at the 97.5th percentile threshold
 - Logs both metrics to KFP's `Metrics` artifact (visible in the Kubeflow UI)
 - Returns `auroc` and `f1` as named tuple outputs consumed by the quality gate
 
-### Stage 4 — Quality Gate (`dsl.Condition`)
+### Stage 4 -> Quality Gate (`dsl.Condition`)
 
 ```python
 with dsl.Condition(eval_op.outputs["auroc"] >= min_auroc, name="quality-gate"):
@@ -80,19 +80,19 @@ with dsl.Condition(eval_op.outputs["auroc"] >= min_auroc, name="quality-gate"):
     deploy_kserve(...).after(push_op)
 ```
 
-If AUROC falls below `min_auroc` (default `0.80`), the `push_model` and `deploy_kserve` stages are **skipped entirely** — the current production model stays live. This is the CD gate for ML.
+If AUROC falls below `min_auroc` (default `0.80`), the `push_model` and `deploy_kserve` stages are **skipped entirely** the current production model stays live. This is the CD gate for ML.
 
-### Stage 5 — `push_model`
+### Stage 5 -> `push_model`
 
 - Uploads `iforest.pkl` and `scaler.pkl` to S3 under a versioned prefix (`s3://<bucket>/cloudguard/models/v1/`)
 - Uses `boto3` with in-cluster IAM or injected AWS credentials
 
-### Stage 6 — `deploy_kserve`
+### Stage 6 -> `deploy_kserve`
 
 - Creates or patches a `KServe InferenceService` via the Kubernetes Python client (`load_incluster_config`)
 - Configures serverless deployment mode with autoscaling (`minReplicas=1`, `maxReplicas=3`)
 - Mounts the model PVC at `/models` so the FastAPI container can load artifacts at startup
-- Handles `409 Conflict` gracefully — patches the existing resource instead of failing
+- Handles `409 Conflict` gracefully patches the existing resource instead of failing
 
 ---
 
@@ -104,7 +104,7 @@ The FastAPI app (`app/main.py`) is the runtime serving layer.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET`  | `/health` | Liveness/readiness probe — returns model load status |
+| `GET`  | `/health` | Liveness/readiness probe returns model load status |
 | `GET`  | `/`       | Service metadata |
 | `POST` | `/predict` | Single event anomaly scoring + TTP mapping |
 | `POST` | `/predict/batch` | Batch scoring for multiple events |
@@ -172,8 +172,8 @@ LogEvent (JSON) ──► MinMaxScaler.transform ──► IsolationForest.score
 The `Dockerfile` builds a minimal inference image:
 
 - Base: `python:3.12-slim` with only `gcc` as a system dep
-- Copies `requirements-serve.txt` (inference-only deps — no training libraries)
-- Model artifacts are **not baked into the image** — they are mounted at runtime via the PVC at `/models`
+- Copies `requirements-serve.txt` (inference-only deps no training libraries)
+- Model artifacts are **not baked into the image** they are mounted at runtime via the PVC at `/models`
 - Environment variables control model paths and threshold, making the image reusable across model versions
 
 ```
@@ -182,7 +182,7 @@ ENV SCALER_PATH=/models/scaler.pkl
 ENV ANOMALY_THRESHOLD=0.5
 ```
 
-This separation of image and model artifacts is a core MLOps pattern — you can roll back a model by swapping the PVC contents without rebuilding the container.
+This separation of image and model artifacts is a core MLOps pattern you can roll back a model by swapping the PVC contents without rebuilding the container.
 
 ---
 
@@ -196,10 +196,10 @@ Provisions a 1Gi `PersistentVolumeClaim` in the `kubeflow-mlops` namespace. The 
 
 Defines the `KServe InferenceService` with:
 
-- **Serverless deployment mode** — scales to zero when idle
+- **Serverless deployment mode** scales to zero when idle
 - **Autoscaling**: 1–3 replicas based on request load
 - **Resource requests/limits**: `500m CPU / 512Mi` → `2 CPU / 2Gi`
-- **Readiness probe** on `GET /health` — KServe won't route traffic until the model is loaded
+- **Readiness probe** on `GET /health` KServe won't route traffic until the model is loaded
 - **Volume mount** of `cloudguard-model-pvc` at `/models`
 
 ---
@@ -242,7 +242,7 @@ scripts/
 
 | Model | AUROC | Notes |
 |-------|-------|-------|
-| Isolation Forest | **0.8935** | Production model — `n_estimators=200`, `contamination=0.005` |
+| Isolation Forest | **0.8935** | Production model `n_estimators=200`, `contamination=0.005` |
 | LSTM Autoencoder | ~0.49 | Experimental only, not used in the pipeline |
 
 Threshold tuning is done in the notebook via a grid search over Precision / Recall / F1 to find the optimal operating point before the model is promoted.
@@ -390,5 +390,5 @@ Upload `CloudGuard.ipynb` to [colab.research.google.com](https://colab.research.
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.  
+MIT License see [LICENSE](LICENSE) for details.  
 Copyright (c) 2026 Mathanprasath K
