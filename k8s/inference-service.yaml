@@ -1,0 +1,44 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: cloudguard
+  namespace: kubeflow-user
+  annotations:
+    serving.kserve.io/deploymentMode: Serverless
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 3
+    containers:
+      - name: cloudguard
+        image: your-registry/cloudguard:latest   # replace with your image
+        ports:
+          - containerPort: 8080
+            protocol: TCP
+        env:
+          - name: MODEL_PATH
+            value: /models/iforest.pkl
+          - name: SCALER_PATH
+            value: /models/scaler.pkl
+          - name: ANOMALY_THRESHOLD
+            value: "0.5"
+        volumeMounts:
+          - name: model-store
+            mountPath: /models
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 5
+    volumes:
+      - name: model-store
+        persistentVolumeClaim:
+          claimName: cloudguard-model-pvc

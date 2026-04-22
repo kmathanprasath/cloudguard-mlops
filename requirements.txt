@@ -1,0 +1,12 @@
+anthropic
+scikit-learn
+tensorflow
+keras
+pandas
+numpy
+fastapi
+uvicorn
+requests
+python-dotenv
+kaggle
+mitreattack-python
