@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Python deps — only what the inference service needs
 COPY requirements-serve.txt .
-RUN pip install --no-cache-dir -r requirements-serve.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # App code
 COPY app/ ./app/

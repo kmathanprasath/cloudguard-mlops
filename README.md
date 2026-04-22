@@ -14,7 +14,7 @@
 ```
 AWS CloudTrail ──┐
 BETH (K8s)    ───┼──► Feature Engineering ──► Isolation Forest ──► MITRE ATT&CK Mapping ──► Claude SOC Analyst
-Linux Auth    ──┘
+Linux Auth     ──┘
 ```
 
 ---
@@ -54,7 +54,7 @@ Linux Auth    ──┘
 ```
 CloudGuard.ipynb            # ML notebook — training & experimentation
 requirements.txt            # Full notebook dependencies
-requirements-serve.txt      # Minimal inference service dependencies
+requirements.txt            # Minimal inference service dependencies
 Dockerfile                  # Container image for the FastAPI service
 
 app/
@@ -107,7 +107,7 @@ Click the key icon in the Colab left sidebar and add:
 
 ### 2. Open in Colab
 
-Upload `CloudGuard_v1.ipynb` to colab.research.google.com and run cells top to bottom.
+Upload `CloudGuard.ipynb` to colab.research.google.com and run cells top to bottom.
 
 ### 3. Dependencies
 

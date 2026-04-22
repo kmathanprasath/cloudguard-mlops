@@ -2,7 +2,7 @@ apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
   name: cloudguard
-  namespace: kubeflow-user
+  namespace: kubeflow-mlops
   annotations:
     serving.kserve.io/deploymentMode: Serverless
 spec:
@@ -11,7 +11,7 @@ spec:
     maxReplicas: 3
     containers:
       - name: cloudguard
-        image: your-registry/cloudguard:latest   # replace with your image
+        image: mathanm5/cloudguard:v1
         ports:
           - containerPort: 8080
             protocol: TCP

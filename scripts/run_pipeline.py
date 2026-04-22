@@ -14,10 +14,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="http://localhost:8080", help="KFP host URL")
     parser.add_argument("--experiment", default="cloudguard", help="KFP experiment name")
-    parser.add_argument("--fused-csv", default="s3://your-bucket/data/fused_logs.csv")
-    parser.add_argument("--s3-bucket", default="your-bucket")
+    parser.add_argument("--fused-csv", default="s3://mathanm5mlops/data/fused_logs.csv")
+    parser.add_argument("--s3-bucket", default="mathanm5mlops")
     parser.add_argument("--s3-prefix", default="cloudguard/models/v1")
-    parser.add_argument("--kserve-image", default="your-registry/cloudguard:latest")
+    parser.add_argument("--kserve-image", default="mathanm5/cloudguard:latest")
     args = parser.parse_args()
 
     client = kfp.Client(host=args.host)

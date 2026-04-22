@@ -167,9 +167,9 @@ def push_model(
 )
 def deploy_kserve(
     model_uri: str,
-    namespace: str = "kubeflow-user",
+    namespace: str = "kubeflow-mlops",
     inference_service_name: str = "cloudguard",
-    image: str = "your-registry/cloudguard:latest",
+    image: str = "mathanm5/cloudguard:v1",
     min_replicas: int = 1,
     max_replicas: int = 3,
 ):
@@ -247,14 +247,14 @@ def deploy_kserve(
     description="Train, evaluate, and deploy CloudGuard Isolation Forest to KServe",
 )
 def cloudguard_pipeline(
-    fused_csv_uri: str = "s3://your-bucket/data/fused_logs.csv",
-    s3_bucket: str = "your-bucket",
+    fused_csv_uri: str = "s3://mathanm5mlops/data/fused_logs.csv",
+    s3_bucket: str = "mathanm5mlops",
     s3_prefix: str = "cloudguard/models/v1",
     aws_region: str = "us-east-1",
     n_estimators: int = 200,
     contamination: float = 0.005,
-    kserve_namespace: str = "kubeflow-user",
-    kserve_image: str = "your-registry/cloudguard:latest",
+    kserve_namespace: str = "kubeflow-mlops",
+    kserve_image: str = "mathanm5/cloudguard:v1",
     min_auroc: float = 0.80,
 ):
     prep = data_prep(fused_csv_uri=fused_csv_uri)
